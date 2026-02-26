@@ -1,0 +1,8 @@
+fastapi==0.133.1
+uvicorn==0.41.0
+python-multipart==0.0.22
+tensorflow==2.20.0
+pandas==2.3.3
+scikit-learn==1.8.0
+numpy==2.4.2
+python-dateutil==2.9.0.post0 
