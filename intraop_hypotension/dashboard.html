@@ -390,6 +390,12 @@
           <span id="postBtnText">ANALYZE POST-OP RISK</span>
         </button>
 
+        <button id="postLoadSampleBtn"
+          class="w-full py-2.5 rounded-xl text-xs font-medium text-slate-400 border border-slate-700 hover:border-amber-500/40 hover:text-amber-400 transition-all flex items-center justify-center gap-2"
+          style="background:rgba(255,255,255,.02)">
+          <span class="material-symbols-outlined text-base">person_add</span>
+          Load Sample Patient
+        </button>
         <button id="postDemoBtn"
           class="w-full py-2.5 rounded-xl text-xs font-medium text-slate-400 border border-slate-700 hover:border-emerald-500/40 hover:text-emerald-400 transition-all flex items-center justify-center gap-2"
           style="background:rgba(255,255,255,.02)">
@@ -851,7 +857,25 @@
       document.getElementById('dismissAlert').addEventListener('click', () => document.getElementById('alertBanner').classList.add('hidden'));
 
       document.getElementById('postAnalyzeBtn').addEventListener('click', analyzePost);
-      document.getElementById('postDemoBtn').addEventListener('click', runPostDemo);
+      /* ── POSTOPERATIVE: LOAD SAMPLE PATIENT ── */
+      function loadSamplePatient() {
+        // Alternates between high-risk and low-risk profiles on each click
+        const profiles = [
+          // High-risk: elderly, renal failure, high lactate
+          { age: 68, gender: 1, Creatinine: 2.8, WBC: 13.5, Hemoglobin: 9.2, Platelet: 130, Lactate: 3.4, Potassium: 5.3, Sodium: 143, diabetes: 1, hypertension: 1, stroke: 0 },
+          // Low-risk: younger, normal labs
+          { age: 45, gender: 0, Creatinine: 0.9, WBC: 6.8, Hemoglobin: 13.5, Platelet: 220, Lactate: 1.3, Potassium: 4.1, Sodium: 138, diabetes: 0, hypertension: 0, stroke: 0 },
+        ];
+        const idx = (loadSamplePatient._i = ((loadSamplePatient._i ?? -1) + 1) % 2);
+        const p = profiles[idx];
+        const map = { age: 'pi_age', gender: 'pi_gender', Creatinine: 'pi_Creatinine', WBC: 'pi_WBC', Hemoglobin: 'pi_Hemoglobin', Platelet: 'pi_Platelet', Lactate: 'pi_Lactate', Potassium: 'pi_Potassium', Sodium: 'pi_Sodium', diabetes: 'pi_diabetes', hypertension: 'pi_hypertension', stroke: 'pi_stroke' };
+        Object.entries(p).forEach(([k, v]) => {
+          const el = document.getElementById(map[k]);
+          if (el) { el.value = v; el.style.borderColor = '#06B6D4'; setTimeout(() => el.style.borderColor = '', 800); }
+        });
+      }
+
+      document.getElementById('postLoadSampleBtn').addEventListener('click', loadSamplePatient);
 
       // Pre-load voices
       if (window.speechSynthesis) {
