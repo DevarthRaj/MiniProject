@@ -74,7 +74,11 @@ async def predict(file: UploadFile = File(...)):
         raise HTTPException(status_code=400, detail="Missing required column: subject_id")
 
     all_patients = df['subject_id'].unique().tolist()
-    selected_id  = random.choice(all_patients)
+
+    # Always pick the highest-risk patient (lowest minimum MeanBP) — consistent, not random
+    def min_mean_bp(pid):
+        return df[df['subject_id'] == pid]['MeanBP'].tail(30).min()
+    selected_id  = min(all_patients, key=min_mean_bp)
     patient_df   = df[df['subject_id'] == selected_id]
 
     recent_data  = patient_df[required_cols].tail(30)
