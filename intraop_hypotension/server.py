@@ -20,7 +20,6 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# ── INTRAOPERATIVE CNN MODEL ─────────────────────────────────────────────────
 CNN_PATH = 'intraop_hypotension/model/hypotension_cnn.h5'
 model = None
 if os.path.exists(CNN_PATH):
@@ -29,7 +28,6 @@ if os.path.exists(CNN_PATH):
 else:
     print(f"❌ CNN model not found at {CNN_PATH}")
 
-# ── POSTOPERATIVE XGBOOST MODEL ──────────────────────────────────────────────
 POST_MODEL_PATH   = 'postoperative/icu_transfer_xgb.pkl'
 POST_FEATURE_PATH = 'postoperative/feature_order.pkl'
 post_model        = None
@@ -46,7 +44,6 @@ else:
     print("❌ Postoperative model files not found")
 
 
-# ── ROUTES ───────────────────────────────────────────────────────────────────
 
 @app.get("/")
 async def serve_dashboard():
@@ -58,7 +55,6 @@ async def favicon():
     return Response(status_code=204)
 
 
-# ── INTRAOPERATIVE: CSV upload → CNN → risk score + vitals ───────────────────
 @app.post("/predict")
 async def predict(file: UploadFile = File(...)):
     if model is None:
@@ -77,9 +73,15 @@ async def predict(file: UploadFile = File(...)):
     selected_id  = random.choice(all_patients)
     patient_df   = df[df['subject_id'] == selected_id]
 
+    patient_df = patient_df.copy()
+    
+    patient_df['charttime'] = pd.to_datetime(patient_df['charttime'], errors='coerce')
+    patient_df = patient_df.dropna(subset=['charttime']) 
+    patient_df = patient_df.set_index('charttime').sort_index()
+    patient_df = patient_df[required_cols].resample('1min').mean().interpolate(method='linear', limit=60)
+    patient_df = patient_df.dropna().reset_index()
     recent_data  = patient_df[required_cols].tail(30)
     raw_data     = recent_data.values.astype(float)
-
     global_means = np.array([85.0, 75.0, 115.0])
     global_stds  = np.array([20.0, 15.0, 20.0])
     scaled_data  = (raw_data - global_means) / global_stds
@@ -111,7 +113,6 @@ async def predict(file: UploadFile = File(...)):
     }
 
 
-# ── POSTOPERATIVE: JSON lab values → XGBoost → ICU transfer risk ─────────────
 class PostopInput(BaseModel):
     age:          float
     gender:       float
@@ -132,11 +133,9 @@ async def predict_post(data: PostopInput):
     if post_model is None:
         raise HTTPException(status_code=500, detail="Postoperative XGBoost model not loaded.")
 
-    # Assemble features in the exact order the model was trained on
     values = [getattr(data, feat) for feat in post_feature_order]
     X = np.array(values, dtype=float).reshape(1, -1)
 
-    # predict_proba returns [P(no ICU), P(ICU transfer)]
     proba      = post_model.predict_proba(X)[0]
     risk_score = float(proba[1])
 
