@@ -1,7 +1,8 @@
-from fastapi import FastAPI, UploadFile, File, HTTPException
+from fastapi import FastAPI, UploadFile, File, HTTPException, Form
 from fastapi.responses import FileResponse, Response
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
+from typing import Optional
 import pandas as pd
 import numpy as np
 import tensorflow as tf
@@ -60,7 +61,7 @@ async def favicon():
 
 # ── INTRAOPERATIVE: CSV upload → CNN → risk score + vitals ───────────────────
 @app.post("/predict")
-async def predict(file: UploadFile = File(...)):
+async def predict(file: UploadFile = File(...), patient_id: Optional[str] = Form(None)):
     if model is None:
         raise HTTPException(status_code=500, detail="CNN model not loaded.")
 
@@ -74,31 +75,52 @@ async def predict(file: UploadFile = File(...)):
         raise HTTPException(status_code=400, detail="Missing required column: subject_id")
 
     all_patients = df['subject_id'].unique().tolist()
-    selected_id  = random.choice(all_patients)
-    patient_df   = df[df['subject_id'] == selected_id]
 
-    recent_data  = patient_df[required_cols].tail(30)
-    raw_data     = recent_data.values.astype(float)
+    # Use specified patient_id or pick randomly
+    if patient_id and patient_id.strip():
+        try:
+            pid = int(patient_id.strip())
+        except ValueError:
+            pid = patient_id.strip()
+        if pid not in all_patients:
+            raise HTTPException(status_code=404,
+                detail=f"Patient ID '{pid}' not found. Available IDs: {all_patients[:20]}{'...' if len(all_patients)>20 else ''}")
+        selected_id = pid
+    else:
+        selected_id = random.choice(all_patients)
 
+    patient_df   = df[df['subject_id'] == selected_id].copy()
+    patient_df   = patient_df.sort_values('charttime').reset_index(drop=True)
+
+    # --- CNN risk score on last 30 rows ---
+    cnn_cols     = patient_df[required_cols].tail(30)
+    cnn_data     = cnn_cols.values.astype(float)
     global_means = np.array([85.0, 75.0, 115.0])
     global_stds  = np.array([20.0, 15.0, 20.0])
-    scaled_data  = (raw_data - global_means) / global_stds
+    scaled_data  = (cnn_data - global_means) / global_stds
 
-    if len(raw_data) < 30:
-        pad_length  = 30 - len(raw_data)
+    if len(cnn_data) < 30:
+        pad_length  = 30 - len(cnn_data)
         scaled_data = np.vstack([np.zeros((pad_length, 3)), scaled_data])
 
     input_tensor = np.expand_dims(scaled_data, axis=0)
     risk_score   = float(model.predict(input_tensor, verbose=0)[0][0])
 
+    # --- Build vitals list from the LAST 30 rows (matching CNN window) ---
+    recent_df = patient_df.tail(30).reset_index(drop=True)
+    recent_data = recent_df[required_cols].values.astype(float)
+    has_pred = 'Hypotension_Next_10min' in recent_df.columns
+
     vitals = [
         {
-            "step":      i + 1,
-            "HeartRate": round(float(raw_data[i][0]), 1),
-            "MeanBP":    round(float(raw_data[i][1]), 1),
-            "SysBP":     round(float(raw_data[i][2]), 1),
+            "step":       i + 1,
+            "time":       str(recent_df.iloc[i]['charttime']),
+            "HeartRate":  round(float(recent_data[i][0]), 1),
+            "MeanBP":     round(float(recent_data[i][1]), 1),
+            "SysBP":      round(float(recent_data[i][2]), 1),
+            "prediction": int(recent_df.iloc[i]['Hypotension_Next_10min']) if has_pred else 0,
         }
-        for i in range(len(raw_data))
+        for i in range(len(recent_data))
     ]
 
     return {

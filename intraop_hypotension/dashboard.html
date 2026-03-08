@@ -55,7 +55,21 @@
     .inp:focus{outline:none;border-color:#06B6D4}
 
     /* Chart */
-    .chart-wrap{position:relative;height:260px;width:100%}
+    .chart-wrap{position:relative;height:240px;width:100%;cursor:pointer}
+    .chart-wrap:hover{outline:1px solid rgba(6,182,212,.3);border-radius:8px}
+    .prediction-badge{padding:6px 14px;border-radius:8px;font-size:11px;font-weight:700;letter-spacing:.5px;transition:all .3s}
+    .prediction-badge.safe{background:rgba(16,185,129,.15);color:#34D399;border:1px solid rgba(16,185,129,.3)}
+    .prediction-badge.danger{background:rgba(239,68,68,.18);color:#F87171;border:1px solid rgba(239,68,68,.4);animation:blink-cr .8s ease-in-out infinite}
+
+    /* Full-screen chart modal */
+    .chart-modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.85);backdrop-filter:blur(8px);z-index:1000;display:none;flex-direction:column;align-items:center;padding:20px}
+    .chart-modal-overlay.open{display:flex}
+    .chart-modal-header{width:100%;max-width:95vw;display:flex;justify-content:space-between;align-items:center;margin-bottom:12px}
+    .chart-modal-scroll{width:95vw;overflow-x:auto;overflow-y:hidden;border:1px solid rgba(255,255,255,.1);border-radius:12px;background:rgba(12,18,30,.9);padding:20px 20px 30px 20px;flex:1}
+    .chart-modal-scroll::-webkit-scrollbar{height:8px}
+    .chart-modal-scroll::-webkit-scrollbar-thumb{background:#334155;border-radius:4px}
+    .chart-modal-inner{height:100%;min-height:350px}
+    .chart-modal-hint{text-align:center;margin-top:10px;font-size:11px;color:#64748b}
 
     /* Spin */
     @keyframes spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}
@@ -176,6 +190,15 @@
           </div>
         </div>
 
+        <div>
+          <div class="flex justify-between items-center mb-1.5">
+            <label class="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">Patient ID
+              (optional)</label>
+            <span class="text-[10px] text-slate-600">Leave blank for random</span>
+          </div>
+          <input id="patientIdInput" type="text" placeholder="e.g. 40177" class="inp" />
+        </div>
+
         <button id="analyzeBtn" disabled
           class="w-full py-3.5 rounded-xl font-semibold text-sm tracking-wide text-white transition-all flex items-center justify-center gap-2 disabled:opacity-35 disabled:cursor-not-allowed"
           style="background:linear-gradient(135deg,#0ea5e9,#2563eb);box-shadow:0 4px 24px rgba(14,165,233,.25)">
@@ -288,14 +311,42 @@
             </div>
           </div>
 
-          <!-- Chart -->
-          <div class="glass rounded-xl p-6 fade-up d2">
-            <div class="flex flex-wrap justify-between items-center mb-5 gap-3">
-              <div>
-                <h3 class="text-sm font-semibold text-white">30-Minute Vital Sign Window</h3>
-                <p class="text-[10px] text-slate-500 mt-0.5">Real patient data fed into CNN model</p>
+          <!-- Two Charts Side by Side -->
+          <div class="grid grid-cols-2 gap-4 fade-up d2">
+
+            <!-- LEFT: Standard Monitoring (No AI) -->
+            <div class="glass rounded-xl p-5">
+              <div class="flex justify-between items-center mb-3">
+                <div>
+                  <h3 class="text-sm font-semibold text-white">Standard Monitoring</h3>
+                  <p class="text-[10px] text-slate-500 mt-0.5">Without AI Prediction Model</p>
+                </div>
               </div>
-              <div class="flex gap-4 flex-wrap">
+              <div class="flex gap-3 mb-3 flex-wrap">
+                <div class="flex items-center gap-1.5"><span
+                    class="w-3 h-0.5 bg-purple-400 rounded inline-block"></span><span
+                    class="text-[10px] text-slate-400">SysBP</span></div>
+                <div class="flex items-center gap-1.5"><span
+                    class="w-3 h-0.5 bg-red-400 rounded inline-block"></span><span
+                    class="text-[10px] text-slate-400">MeanBP</span></div>
+                <div class="flex items-center gap-1.5"><span
+                    class="w-3 h-0.5 bg-blue-400 rounded inline-block"></span><span
+                    class="text-[10px] text-slate-400">HeartRate</span></div>
+              </div>
+              <div id="stdStatus" class="prediction-badge safe mb-3 text-center">● LIVE MONITORING — NO AI ANALYSIS
+              </div>
+              <div class="chart-wrap"><canvas id="stdChart"></canvas></div>
+            </div>
+
+            <!-- RIGHT: AI-Enhanced Monitoring -->
+            <div class="glass rounded-xl p-5">
+              <div class="flex justify-between items-center mb-3">
+                <div>
+                  <h3 class="text-sm font-semibold text-white">AI-Enhanced Monitoring</h3>
+                  <p class="text-[10px] text-slate-500 mt-0.5">With CNN Prediction Model</p>
+                </div>
+              </div>
+              <div class="flex gap-3 mb-3 flex-wrap">
                 <div class="flex items-center gap-1.5"><span
                     class="w-3 h-0.5 bg-purple-400 rounded inline-block"></span><span
                     class="text-[10px] text-slate-400">SysBP</span></div>
@@ -306,11 +357,14 @@
                     class="w-3 h-0.5 bg-blue-400 rounded inline-block"></span><span
                     class="text-[10px] text-slate-400">HeartRate</span></div>
                 <div class="flex items-center gap-1.5"><span
-                    class="w-3 border-t border-dashed border-red-400/50 inline-block"></span><span
-                    class="text-[10px] text-slate-500">Threshold 65</span></div>
+                    class="w-2.5 h-2.5 rounded-full bg-red-500/40 inline-block border border-red-500"></span><span
+                    class="text-[10px] text-slate-400">Hypotension Predicted</span></div>
               </div>
+              <div id="predictionBadge" class="prediction-badge safe mb-3 text-center">✓ STABLE — Waiting for data…
+              </div>
+              <div class="chart-wrap"><canvas id="aiChart"></canvas></div>
             </div>
-            <div class="chart-wrap"><canvas id="vitalsChart"></canvas></div>
+
           </div>
 
           <!-- Diagnosis -->
@@ -506,7 +560,9 @@
     const API_POST_URL = 'http://localhost:8000/predict_post';
 
     let selectedFile = null;
-    let currentChart = null;
+    let stdChartInstance = null;
+    let aiChartInstance = null;
+    let animationTimer = null;
     let lastTTSMsg = null;
 
     /* ── RISK STATE CONFIG ── */
@@ -641,46 +697,161 @@
       if (meta) meta.textContent = metaText;
     }
 
-    /* ── CHART ── */
-    function buildChart(vitals) {
-      if (currentChart) { currentChart.destroy(); currentChart = null; }
-      const ctx = document.getElementById('vitalsChart').getContext('2d');
-      const labels = vitals.map((_, i) => `T-${vitals.length - i}`);
-      currentChart = new Chart(ctx, {
+    /* ── CHART HELPERS ── */
+    const thresholdPlugin = {
+      id: 'threshold',
+      afterDatasetsDraw(chart) {
+        const { ctx: c, scales: { x, y } } = chart; const yp = y.getPixelForValue(65);
+        if (yp < y.top || yp > y.bottom) return;
+        c.save(); c.beginPath(); c.strokeStyle = 'rgba(248,113,113,.4)'; c.lineWidth = 1.5; c.setLineDash([6, 5]);
+        c.moveTo(x.left, yp); c.lineTo(x.right, yp); c.stroke(); c.setLineDash([]);
+        c.fillStyle = 'rgba(248,113,113,.6)'; c.font = 'bold 9px Inter';
+        c.fillText('Threshold 65 mmHg', x.left + 8, yp - 5); c.restore();
+      }
+    };
+
+    /* Prediction zone plugin — draws red/green bands behind the AI chart */
+    function makePredictionPlugin(predictionsArr) {
+      return {
+        id: 'predZones',
+        beforeDatasetsDraw(chart) {
+          const { ctx: c, scales: { x, y }, data } = chart;
+          const labels = data.labels;
+          if (!labels || labels.length < 2) return;
+          c.save();
+          for (let i = 0; i < labels.length; i++) {
+            const pred = predictionsArr[i];
+            if (pred === undefined) continue;
+            const xPx = x.getPixelForValue(i);
+            const halfBar = (x.getPixelForValue(1) - x.getPixelForValue(0)) / 2 || 12;
+            if (pred === 1) {
+              // Red danger zone — high visibility
+              c.fillStyle = 'rgba(239,68,68,.25)';
+              c.fillRect(xPx - halfBar, y.top, halfBar * 2, y.bottom - y.top);
+              // Red top bar
+              c.fillStyle = 'rgba(239,68,68,.7)';
+              c.fillRect(xPx - halfBar, y.top, halfBar * 2, 3);
+              // Red dot at bottom
+              c.fillStyle = 'rgba(239,68,68,.9)';
+              c.beginPath(); c.arc(xPx, y.bottom + 10, 5, 0, Math.PI * 2); c.fill();
+              // Warning icon text
+              c.fillStyle = 'rgba(239,68,68,.5)';
+              c.font = 'bold 9px Inter';
+              c.textAlign = 'center';
+              c.fillText('⚠', xPx, y.top + 14);
+              c.textAlign = 'start';
+            } else {
+              c.fillStyle = 'rgba(16,185,129,.06)';
+              c.fillRect(xPx - halfBar, y.top, halfBar * 2, y.bottom - y.top);
+            }
+          }
+          c.restore();
+        }
+      };
+    }
+
+    function makeChartConfig(plugins) {
+      return {
         type: 'line',
         data: {
-          labels,
+          labels: [],
           datasets: [
-            { label: 'SysBP', data: vitals.map(v => v.SysBP), borderColor: '#A78BFA', borderWidth: 2, tension: .42, pointRadius: 0 },
-            { label: 'MeanBP', data: vitals.map(v => v.MeanBP), borderColor: '#F87171', borderWidth: 3, tension: .42, pointRadius: 0 },
-            { label: 'HeartRate', data: vitals.map(v => v.HeartRate), borderColor: '#60A5FA', borderWidth: 2, tension: .42, pointRadius: 0 },
+            { label: 'SysBP', data: [], borderColor: '#A78BFA', borderWidth: 2, tension: .42, pointRadius: 0, pointHoverRadius: 4 },
+            { label: 'MeanBP', data: [], borderColor: '#F87171', borderWidth: 2.5, tension: .42, pointRadius: 0, pointHoverRadius: 4 },
+            { label: 'HeartRate', data: [], borderColor: '#60A5FA', borderWidth: 2, tension: .42, pointRadius: 0, pointHoverRadius: 4 },
           ]
         },
         options: {
           responsive: true, maintainAspectRatio: false,
-          animation: { duration: 900, easing: 'easeInOutQuart' },
+          animation: { duration: 350, easing: 'easeOutCubic' },
           interaction: { mode: 'index', intersect: false },
           plugins: {
             legend: { display: false },
             tooltip: { backgroundColor: 'rgba(10,16,28,.96)', titleColor: '#e2e8f0', bodyColor: '#94a3b8', borderColor: 'rgba(255,255,255,.08)', borderWidth: 1, padding: 10 }
           },
           scales: {
-            x: { grid: { color: 'rgba(255,255,255,.04)' }, ticks: { color: '#475569', font: { size: 9, family: 'Inter' }, maxTicksLimit: 10 } },
-            y: { grid: { color: 'rgba(255,255,255,.04)' }, ticks: { color: '#475569', font: { size: 9, family: 'Inter' } }, suggestedMin: 30, suggestedMax: 160 }
+            x: { grid: { color: 'rgba(255,255,255,.04)' }, ticks: { color: '#475569', font: { size: 8, family: 'Inter' }, maxTicksLimit: 8, maxRotation: 0 } },
+            y: { grid: { color: 'rgba(255,255,255,.04)' }, ticks: { color: '#475569', font: { size: 9, family: 'Inter' } }, suggestedMin: 30, suggestedMax: 180 }
           }
         },
-        plugins: [{
-          id: 'threshold',
-          afterDatasetsDraw(chart) {
-            const { ctx: c, scales: { x, y } } = chart; const yp = y.getPixelForValue(65);
-            if (yp < y.top || yp > y.bottom) return;
-            c.save(); c.beginPath(); c.strokeStyle = 'rgba(248,113,113,.4)'; c.lineWidth = 1.5; c.setLineDash([6, 5]);
-            c.moveTo(x.left, yp); c.lineTo(x.right, yp); c.stroke(); c.setLineDash([]);
-            c.fillStyle = 'rgba(248,113,113,.6)'; c.font = 'bold 9px Inter';
-            c.fillText('Hypotension threshold — 65 mmHg', x.left + 8, yp - 5); c.restore();
+        plugins: plugins || []
+      };
+    }
+
+    /* ── REAL-TIME ANIMATION ENGINE ── */
+    let animPredictions = [];   // prediction values for the AI chart plugin
+
+    function startRealtimePlot(vitals) {
+      // Store full vitals for the modal
+      allVitalsData = vitals;
+
+      // Cleanup previous
+      if (animationTimer) { clearInterval(animationTimer); animationTimer = null; }
+      if (stdChartInstance) { stdChartInstance.destroy(); stdChartInstance = null; }
+      if (aiChartInstance) { aiChartInstance.destroy(); aiChartInstance = null; }
+      animPredictions = [];
+
+      const stdCtx = document.getElementById('stdChart').getContext('2d');
+      const aiCtx = document.getElementById('aiChart').getContext('2d');
+
+      stdChartInstance = new Chart(stdCtx, makeChartConfig([thresholdPlugin]));
+      aiChartInstance = new Chart(aiCtx, makeChartConfig([thresholdPlugin, makePredictionPlugin(animPredictions)]));
+
+      const MAX_VISIBLE = 30;  // keep last 30 points visible
+      let idx = 0;
+      const badge = document.getElementById('predictionBadge');
+      const stdStatus = document.getElementById('stdStatus');
+
+      function addPoint() {
+        if (idx >= vitals.length) {
+          clearInterval(animationTimer);
+          animationTimer = null;
+          badge.textContent = '✅ ANALYSIS COMPLETE';
+          badge.className = 'prediction-badge safe mb-3 text-center';
+          stdStatus.textContent = '● MONITORING COMPLETE';
+          return;
+        }
+
+        const v = vitals[idx];
+        const timeLabel = v.time ? v.time.split(' ')[1] || `T${v.step}` : `T${v.step}`;
+
+        // Push to both charts
+        [stdChartInstance, aiChartInstance].forEach(chart => {
+          chart.data.labels.push(timeLabel);
+          chart.data.datasets[0].data.push(v.SysBP);
+          chart.data.datasets[1].data.push(v.MeanBP);
+          chart.data.datasets[2].data.push(v.HeartRate);
+
+          // Sliding window
+          if (chart.data.labels.length > MAX_VISIBLE) {
+            chart.data.labels.shift();
+            chart.data.datasets.forEach(ds => ds.data.shift());
           }
-        }]
-      });
+        });
+
+        // Predictions for AI chart
+        animPredictions.push(v.prediction || 0);
+        if (animPredictions.length > MAX_VISIBLE) animPredictions.shift();
+
+        // Update prediction badge
+        if (v.prediction === 1) {
+          badge.textContent = '⚠ HYPOTENSION PREDICTED — Intervention Needed';
+          badge.className = 'prediction-badge danger mb-3 text-center';
+        } else {
+          badge.textContent = '✓ STABLE — No Hypotension Detected';
+          badge.className = 'prediction-badge safe mb-3 text-center';
+        }
+
+        stdStatus.textContent = `● LIVE — Step ${v.step} of ${vitals.length}`;
+
+        stdChartInstance.update();
+        aiChartInstance.update();
+        idx++;
+      }
+
+      // Start animation: one point every 800ms
+      addPoint(); // first point immediately
+      animationTimer = setInterval(addPoint, 800);
     }
 
     /* ── FILE HANDLING ── */
@@ -720,7 +891,7 @@
       setDiagBanner('diagBanner', 'diagIcon', 'diagTitle', 'diagBody', state, `CNN · MIMIC-III · 30-min window · File: ${data.filename_processed}`);
       document.getElementById('diagMeta').textContent = `CNN · MIMIC-III · 30-min window · File: ${data.filename_processed}`;
 
-      if (data.vitals && data.vitals.length > 0) buildChart(data.vitals);
+      if (data.vitals && data.vitals.length > 0) startRealtimePlot(data.vitals);
     }
 
     /* ── INTRAOPERATIVE: ANALYZE (real API) ── */
@@ -733,6 +904,8 @@
       ico.classList.add('spinning');
       try {
         const fd = new FormData(); fd.append('file', selectedFile);
+        const pidVal = document.getElementById('patientIdInput')?.value?.trim();
+        if (pidVal) fd.append('patient_id', pidVal);
         const resp = await fetch(API_URL, { method: 'POST', body: fd });
         if (!resp.ok) { const e = await resp.json().catch(() => ({ detail: `HTTP ${resp.status}` })); throw new Error(e.detail); }
         showResults(await resp.json());
@@ -754,7 +927,15 @@
       const score = scores[idx];
       const vitals = Array.from({ length: 30 }, (_, i) => {
         const d = score > .7 ? (i / 29) * 35 : score > .5 ? (i / 29) * 15 : 0;
-        return { step: i + 1, HeartRate: Math.round(68 + d * 2.2 + Math.random() * 4), MeanBP: Math.round(92 - d + Math.random() * 3), SysBP: Math.round(125 - d * 1.5 + Math.random() * 4) };
+        const hr = Math.round(68 + d * 2.2 + Math.random() * 4);
+        const mbp = Math.round(92 - d + Math.random() * 3);
+        const sbp = Math.round(125 - d * 1.5 + Math.random() * 4);
+        return {
+          step: i + 1,
+          time: `${String(Math.floor(i / 2) + 8).padStart(2, '0')}:${i % 2 === 0 ? '00' : '30'}:00`,
+          HeartRate: hr, MeanBP: mbp, SysBP: sbp,
+          prediction: (score > .5 && i >= 15) ? (i % 3 !== 0 ? 1 : 0) : 0
+        };
       });
       showResults({ patient_id: 'DEMO-' + (idx + 1), occurrence_time: new Date().toISOString().replace('T', ' ').slice(0, 19), filename_processed: 'demo.csv', risk_score: score, vitals });
     }
@@ -883,6 +1064,152 @@
         window.speechSynthesis.getVoices();
       }
     });
+  </script>
+
+  <!-- Full-screen chart modal -->
+  <div id="chartModal" class="chart-modal-overlay" onclick="if(event.target===this)closeChartModal()">
+    <div class="chart-modal-header">
+      <div>
+        <h2 id="modalTitle" class="text-lg font-bold text-white">Full Timeline View</h2>
+        <p id="modalSub" class="text-xs text-slate-400 mt-0.5">Scroll horizontally to view all data points</p>
+      </div>
+      <button onclick="closeChartModal()"
+        class="p-2 rounded-lg bg-white/5 hover:bg-white/10 text-slate-300 transition-all">
+        <span class="material-symbols-outlined text-xl">close</span>
+      </button>
+    </div>
+    <div class="chart-modal-scroll">
+      <div class="chart-modal-inner" id="modalChartContainer">
+        <canvas id="modalChart"></canvas>
+      </div>
+    </div>
+    <div class="chart-modal-hint">← Scroll or swipe horizontally to explore the full timeline →</div>
+  </div>
+
+  <script>
+    /* ── FULL CHART MODAL ── */
+    let allVitalsData = [];    // store complete vitals for modal
+    let modalChartInstance = null;
+
+    function openChartModal(mode) {
+      if (!allVitalsData.length) return;
+
+      const modal = document.getElementById('chartModal');
+      const container = document.getElementById('modalChartContainer');
+      const title = document.getElementById('modalTitle');
+      const sub = document.getElementById('modalSub');
+
+      const isAI = (mode === 'ai');
+      title.textContent = isAI ? 'AI-Enhanced Monitoring — Full Timeline' : 'Standard Monitoring — Full Timeline';
+      sub.textContent = `${allVitalsData.length} data points · Scroll horizontally to navigate`;
+
+      // Compute canvas width: 60px per data point for clarity, minimum 95vw
+      const pxPerPoint = 60;
+      const totalWidth = Math.max(window.innerWidth * 0.9, allVitalsData.length * pxPerPoint);
+      container.style.width = totalWidth + 'px';
+
+      // Destroy previous modal chart
+      if (modalChartInstance) { modalChartInstance.destroy(); modalChartInstance = null; }
+
+      // Recreate canvas with high DPI for crisp rendering
+      const dpr = window.devicePixelRatio || 1;
+      const containerHeight = container.parentElement.clientHeight - 60; // account for padding
+      const canvasHeight = Math.max(400, containerHeight);
+      container.innerHTML = '<canvas id="modalChart"></canvas>';
+      const canvas = document.getElementById('modalChart');
+      canvas.width = totalWidth * dpr;
+      canvas.height = canvasHeight * dpr;
+      canvas.style.width = totalWidth + 'px';
+      canvas.style.height = canvasHeight + 'px';
+      const ctx = canvas.getContext('2d');
+      ctx.scale(dpr, dpr);
+
+      const labels = allVitalsData.map(v => v.time ? v.time.split(' ')[1] || `T${v.step}` : `T${v.step}`);
+      const sysbp = allVitalsData.map(v => v.SysBP);
+      const meanbp = allVitalsData.map(v => v.MeanBP);
+      const hr = allVitalsData.map(v => v.HeartRate);
+      const preds = allVitalsData.map(v => v.prediction || 0);
+
+      const plugins = [{
+        id: 'modalThreshold',
+        afterDatasetsDraw(chart) {
+          const { ctx: c, scales: { x, y } } = chart; const yp = y.getPixelForValue(65);
+          if (yp < y.top || yp > y.bottom) return;
+          c.save(); c.beginPath(); c.strokeStyle = 'rgba(248,113,113,.4)'; c.lineWidth = 1.5; c.setLineDash([6, 5]);
+          c.moveTo(x.left, yp); c.lineTo(x.right, yp); c.stroke(); c.setLineDash([]);
+          c.fillStyle = 'rgba(248,113,113,.6)'; c.font = 'bold 10px Inter';
+          c.fillText('Threshold 65 mmHg', x.left + 8, yp - 6); c.restore();
+        }
+      }];
+
+      if (isAI) {
+        plugins.push({
+          id: 'modalPredZones',
+          beforeDatasetsDraw(chart) {
+            const { ctx: c, scales: { x, y }, data } = chart;
+            const lbls = data.labels;
+            if (!lbls || lbls.length < 2) return;
+            c.save();
+            for (let i = 0; i < lbls.length; i++) {
+              const xPx = x.getPixelForValue(i);
+              const halfBar = (x.getPixelForValue(1) - x.getPixelForValue(0)) / 2 || 12;
+              if (preds[i] === 1) {
+                c.fillStyle = 'rgba(239,68,68,.25)';
+                c.fillRect(xPx - halfBar, y.top, halfBar * 2, y.bottom - y.top);
+                c.fillStyle = 'rgba(239,68,68,.7)';
+                c.fillRect(xPx - halfBar, y.top, halfBar * 2, 3);
+                c.fillStyle = 'rgba(239,68,68,.9)';
+                c.beginPath(); c.arc(xPx, y.bottom + 10, 5, 0, Math.PI * 2); c.fill();
+              } else {
+                c.fillStyle = 'rgba(16,185,129,.06)';
+                c.fillRect(xPx - halfBar, y.top, halfBar * 2, y.bottom - y.top);
+              }
+            }
+            c.restore();
+          }
+        });
+      }
+
+      modalChartInstance = new Chart(ctx, {
+        type: 'line',
+        data: {
+          labels,
+          datasets: [
+            { label: 'SysBP', data: sysbp, borderColor: '#A78BFA', borderWidth: 2.5, tension: .42, pointRadius: 3, pointHoverRadius: 6, pointBackgroundColor: '#A78BFA' },
+            { label: 'MeanBP', data: meanbp, borderColor: '#F87171', borderWidth: 3, tension: .42, pointRadius: 3, pointHoverRadius: 6, pointBackgroundColor: '#F87171' },
+            { label: 'HeartRate', data: hr, borderColor: '#60A5FA', borderWidth: 2.5, tension: .42, pointRadius: 3, pointHoverRadius: 6, pointBackgroundColor: '#60A5FA' },
+          ]
+        },
+        options: {
+          responsive: false, maintainAspectRatio: false,
+          animation: { duration: 500 },
+          interaction: { mode: 'index', intersect: false },
+          plugins: {
+            legend: { display: true, position: 'top', labels: { color: '#94a3b8', font: { size: 13, family: 'Inter' }, usePointStyle: true, padding: 20 } },
+            tooltip: { backgroundColor: 'rgba(10,16,28,.96)', titleColor: '#e2e8f0', bodyColor: '#94a3b8', borderColor: 'rgba(255,255,255,.08)', borderWidth: 1, padding: 14, titleFont: { size: 13 }, bodyFont: { size: 12 } }
+          },
+          scales: {
+            x: { grid: { color: 'rgba(255,255,255,.06)' }, ticks: { color: '#94a3b8', font: { size: 11, family: 'Inter' }, maxRotation: 45, autoSkip: false } },
+            y: { grid: { color: 'rgba(255,255,255,.06)' }, ticks: { color: '#94a3b8', font: { size: 12, family: 'Inter' } }, suggestedMin: 30, suggestedMax: 180 }
+          }
+        },
+        plugins
+      });
+
+      modal.classList.add('open');
+    }
+
+    function closeChartModal() {
+      document.getElementById('chartModal').classList.remove('open');
+      if (modalChartInstance) { modalChartInstance.destroy(); modalChartInstance = null; }
+    }
+
+    // ESC key to close
+    document.addEventListener('keydown', e => { if (e.key === 'Escape') closeChartModal(); });
+
+    // Click handlers for the small charts
+    document.getElementById('stdChart')?.closest('.chart-wrap')?.addEventListener('click', () => openChartModal('std'));
+    document.getElementById('aiChart')?.closest('.chart-wrap')?.addEventListener('click', () => openChartModal('ai'));
   </script>
 </body>
 
